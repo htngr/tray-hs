@@ -32,4 +32,4 @@ main = runTrayLoop tray $
         return ()
 ```
 
-Run with `nix run github:htngr/tray-hs?submodules=1`
+Run with `nix run git+http://github.com/htngr/tray-hs?submodules=1`
