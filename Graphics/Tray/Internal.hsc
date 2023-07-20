@@ -1,8 +1,9 @@
+{-# LANGUAGE CPP #-}
+
 module Graphics.Tray.Internal where
 
 import Foreign
 import Foreign.C
-import Data.Maybe (fromMaybe)
 
 #ifdef mingw32_HOST_OS
 #define TRAY_WINAPI 1
@@ -14,57 +15,61 @@ import Data.Maybe (fromMaybe)
 
 #include "tray.h"
 
-data Tray = Tray 
-    { trayIcon :: FilePath
-    , trayTooltip :: String
-    , trayMenu :: [MenuItem]
-    } deriving (Eq, Show)
+data Tray = Tray
+    { trayIcon :: !FilePath
+    , trayTooltip :: !String
+    , trayMenu :: ![MenuItem]
+    }
+    deriving (Eq, Show)
 
 newtype TrayPtr = TrayPtr (Ptr Tray)
 
 data MenuItem = MenuItem
-    { menuText :: Maybe String
-    , menuDisabled :: Bool
-    , menuIsCheckbox :: Bool
-    , menuChecked :: Bool
-    , menuCallback :: Callback
-    , menuChildren :: [MenuItem]
+    { menuText :: !(Maybe String)
+    , menuDisabled :: !Bool
+    , menuIsCheckbox :: !Bool
+    , menuChecked :: !Bool
+    , menuCallback :: !Callback
+    , menuChildren :: ![MenuItem]
     }
 
 data Callback
-    = Cb MenuItemCb
-    | CbPtr (FunPtr MenuItemCb)
+    = Cb !MenuItemCb
+    | CbPtr !(FunPtr MenuItemCb)
     | Noop
 
 instance Eq MenuItem where
-    a == b = menuText a        == menuText b
-           && menuDisabled a   == menuDisabled b
-           && menuIsCheckbox a == menuIsCheckbox b
-           && menuChecked a    == menuChecked b
-           && menuChildren a   == menuChildren b
+    a == b =
+        menuText a == menuText b
+            && menuDisabled a == menuDisabled b
+            && menuIsCheckbox a == menuIsCheckbox b
+            && menuChecked a == menuChecked b
+            && menuChildren a == menuChildren b
 
 instance Show MenuItem where
-    show (MenuItem {..}) = 
+    show (MenuItem{..}) =
         "MenuItem " <> show (menuText, menuDisabled, menuIsCheckbox, menuChecked, menuChildren)
 
 newtype MenuItemPtr = MenuItemPtr (Ptr MenuItem)
+
 type MenuItemCb = MenuItemPtr -> IO ()
-foreign import ccall "wrapper" 
+
+foreign import ccall "wrapper"
     wrapCb :: MenuItemCb -> IO (FunPtr MenuItemCb)
 
 defaultMenuItem :: MenuItem
-defaultMenuItem = MenuItem
-    { menuText = Nothing
-    , menuDisabled = False
-    , menuIsCheckbox = False
-    , menuChecked = False
-    , menuCallback = Noop
-    , menuChildren = []
-    }
+defaultMenuItem =
+    MenuItem
+        { menuText = Nothing
+        , menuDisabled = False
+        , menuIsCheckbox = False
+        , menuChecked = False
+        , menuCallback = Noop
+        , menuChildren = []
+        }
 
 separator :: MenuItem
-separator = defaultMenuItem { menuText = Just "-" }
-
+separator = defaultMenuItem{menuText = Just "-"}
 instance Storable Tray where
     sizeOf _ = #{size struct tray}
     alignment _ = #{alignment struct tray}
@@ -77,20 +82,21 @@ instance Storable Tray where
         newCString trayIcon >>= #{poke struct tray, icon} ptr
         newCString trayTooltip >>= #{poke struct tray, tooltip} ptr
         pokeMenuItems (#{ptr struct tray, menu} ptr) trayMenu
-
+      
 instance Storable MenuItem where
     sizeOf _ = #{size struct tray_menu}
     alignment _ = #{alignment struct tray_menu}
     peek ptr = do
         menuText <- #{peek struct tray_menu, text} ptr >>= maybePeek peekCString 
-        menuDisabled   <- #{peek struct tray_menu, disabled} ptr
-        menuChecked    <- #{peek struct tray_menu, checked} ptr
+        menuDisabled <- #{peek struct tray_menu, disabled} ptr
+        menuChecked <- #{peek struct tray_menu, checked} ptr
         menuIsCheckbox <- #{peek struct tray_menu, checkbox} ptr
-
+  
         cbPtr <- #{peek struct tray_menu, cb} ptr 
-        let menuCallback = if cbPtr == nullFunPtr
-                           then Noop
-                           else CbPtr cbPtr
+        let menuCallback =
+                if cbPtr == nullFunPtr
+                    then Noop
+                    else CbPtr cbPtr
         menuChildren <- peekMenuItems (#{ptr struct tray_menu, submenu} ptr)
         return (MenuItem {..})
     poke ptr (MenuItem {..}) = do
@@ -106,9 +112,9 @@ instance Storable MenuItem where
             CbPtr cbPtr -> #{poke struct tray_menu, cb} ptr cbPtr
         #{poke struct tray_menu, context} ptr nullPtr
         pokeMenuItems (#{ptr struct tray_menu, submenu} ptr) menuChildren
-        
+      
 pokeMenuItems :: Ptr (Ptr MenuItem) -> [MenuItem] -> IO ()
-pokeMenuItems ptr []    = poke ptr nullPtr
+pokeMenuItems ptr [] = poke ptr nullPtr
 pokeMenuItems ptr items = newArray0 defaultMenuItem items >>= poke ptr
 
 peekMenuItems :: Ptr (Ptr MenuItem) -> IO [MenuItem]
@@ -131,15 +137,15 @@ foreign import ccall safe "tray_exit"
     c_tray_exit :: IO ()
 
 modifyTray :: TrayPtr -> (Tray -> Tray) -> Callback
-modifyTray (TrayPtr ptr) f = Cb $ 
+modifyTray (TrayPtr ptr) f = Cb $
     \_ -> do
-        tray0 <- peek ptr 
+        tray0 <- peek ptr
         let tray1 = f tray0
         poke ptr tray1
         c_tray_update (TrayPtr ptr)
 
 modifyItem :: TrayPtr -> (MenuItem -> MenuItem) -> Callback
-modifyItem trayPtr f = Cb $ 
+modifyItem trayPtr f = Cb $
     \(MenuItemPtr ptr) -> do
         item0 <- peek ptr
         let item1 = f item0

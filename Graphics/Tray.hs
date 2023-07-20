@@ -1,9 +1,9 @@
 module Graphics.Tray (
     Callback,
-    MenuItem(..),
+    MenuItem (..),
     MenuItemCb,
     MenuItemPtr,
-    Tray(..),
+    Tray (..),
     TrayPtr,
     defaultMenuItem,
     exitTray,
@@ -11,13 +11,12 @@ module Graphics.Tray (
     modifyTray,
     runTrayLoop,
     separator,
-) where
+)
+where
 
 import Control.Exception (finally)
 import Control.Monad (when)
-
 import Foreign (alloca, poke)
-
 import Graphics.Tray.Internal
 
 runTrayLoop :: (TrayPtr -> Tray) -> (TrayPtr -> IO ()) -> IO ()

@@ -47,8 +47,7 @@
           ghcid
 
           cabal-fmt
-          # fourmolu
-          stylish-haskell
+          fourmolu
         ];
 
         shellHook = ''
